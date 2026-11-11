@@ -205,7 +205,13 @@ impl ReplicationCheckpointMap {
     ) -> Option<CompletedCheckpoint> {
         let checkpoint = CompletedCheckpoint {
             replicon_tick,
-            tick: self.get(replicon_tick)?,
+            tick: self.get(replicon_tick).or_else(|| {
+                // Completion can remain unchanged longer than recent mapping retention.
+                // Reuse only its exact, already resolved frontier, never an unknown tick.
+                self.last_confirmed_checkpoint
+                    .filter(|cached| cached.replicon_tick == replicon_tick)
+                    .map(|cached| cached.tick)
+            })?,
         };
         if self.last_confirmed_checkpoint.is_none_or(|existing| {
             checkpoint.tick > existing.tick
@@ -294,6 +300,44 @@ pub(crate) fn record_authoritative_tick_userdata(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn completed_frontier_remains_resolvable_after_recent_table_eviction() {
+        let mut map = ReplicationCheckpointMap::default();
+        let frontier = RepliconTick::new(282);
+        map.record(frontier, Tick(564));
+        let completed = map.record_last_confirmed_checkpoint(frontier).unwrap();
+        for offset in 1..=MAX_STORED_CHECKPOINTS as u32 + 1 {
+            map.record(frontier + offset, Tick(564 + offset));
+        }
+        assert_eq!(map.entries.len(), MAX_STORED_CHECKPOINTS);
+        assert_eq!(map.get(frontier), None);
+        assert_eq!(map.last_confirmed_checkpoint(), Some(completed));
+        assert_eq!(
+            map.record_last_confirmed_checkpoint(frontier),
+            Some(completed)
+        );
+        assert_eq!(map.record_last_confirmed_checkpoint(frontier - 1), None);
+        let next = frontier + MAX_STORED_CHECKPOINTS as u32 + 1;
+        assert!(map.record_last_confirmed_checkpoint(next).is_some());
+        map.clear();
+        assert_eq!(map.record_last_confirmed_checkpoint(frontier), None);
+        assert_eq!(map.last_confirmed_checkpoint(), None);
+    }
+
+    #[test]
+    fn recorded_mapping_takes_precedence_over_cached_completion() {
+        let mut map = ReplicationCheckpointMap::default();
+        let frontier = RepliconTick::new(10);
+        map.record(frontier, Tick(100));
+        map.record_last_confirmed_checkpoint(frontier).unwrap();
+        map.record(frontier, Tick(110));
+        assert_eq!(
+            map.record_last_confirmed_checkpoint(frontier).unwrap().tick,
+            Tick(110)
+        );
+        assert_eq!(map.record_last_confirmed_checkpoint(frontier + 1), None);
+    }
 
     #[test]
     fn checkpoint_map_prunes_old_entries() {
