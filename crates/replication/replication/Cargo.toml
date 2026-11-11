@@ -23,16 +23,16 @@ avian2d = ["dep:avian2d"]
 avian3d = ["dep:avian3d"]
 
 [dependencies]
-lightyear_link.workspace = true
-lightyear_utils.workspace = true
-lightyear_serde.workspace = true
-lightyear_core.workspace = true
-lightyear_connection.workspace = true
+lightyear_link = { version = "=0.31.0", default-features = false }
+lightyear_utils = { version = "=0.31.0", default-features = false }
+lightyear_serde = { version = "=0.31.0", default-features = false }
+lightyear_core = { version = "=0.31.0", default-features = false }
+lightyear_connection = { version = "=0.31.0", default-features = false }
 # `replicon` lets message (de)serialization read replicon's shared entity map
 # instead of a per-connection copy.
-lightyear_messages = { workspace = true, features = ["replicon"] }
-lightyear_transport.workspace = true
-lightyear_sync = { workspace = true, optional = true }
+lightyear_messages = { version = "=0.31.0", default-features = false, features = ["replicon"] }
+lightyear_transport = { version = "=0.31.0", default-features = false }
+lightyear_sync = { version = "=0.31.0", default-features = false, optional = true }
 
 # utils
 indexmap.workspace = true
